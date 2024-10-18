@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>Laravel</title>
+    <title>NASA APOD Explorer</title>
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.bunny.net">
@@ -904,6 +904,19 @@
             }
         </style>
     @endif
+
+    <!-- Zusätzliche Tailwind CSS Klassen für das Modal und die Karten -->
+    <style>
+        /* Aktivierung der line-clamp Funktionalität */
+        @layer utilities {
+            .line-clamp-3 {
+                overflow: hidden;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 3;
+            }
+        }
+    </style>
 </head>
 
 <body class="bg-gray-100">
@@ -939,13 +952,51 @@
         </div>
     </div>
 
+    <!-- Error Message Section -->
+    @if (isset($error))
+        <div class="max-w-6xl mx-auto px-4 py-8">
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <strong class="font-bold">Fehler!</strong>
+                <span class="block sm:inline">{{ $error }}</span>
+            </div>
+        </div>
+    @endif
+
     <!-- Results Section -->
     <div class="max-w-6xl mx-auto px-4 py-12">
         <div id="results" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- Hier werden die APOD-Ergebnisse angezeigt -->
+            <!-- APOD results will be displayed here -->
         </div>
         <div id="loading" class="hidden text-center py-8">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="hidden fixed z-10 inset-0 overflow-y-auto">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity" aria-hidden="true">
+                <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div
+                class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900"></h3>
+                    <p id="modal-description" class="mt-2 text-sm text-gray-500"></p>
+                    <a id="modal-hdurl" href="#" target="_blank"
+                        class="mt-4 inline-block text-blue-600 hover:text-blue-800">HD-Bild ansehen →</a>
+                </div>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="button"
+                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+                        onclick="closeModal()">
+                        Schließen
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -965,24 +1016,29 @@
             resultsDiv.innerHTML = '';
 
             try {
-                const response = await fetch('/api/apod');
+                const response = await fetch('/api/apod?count=5');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                const apod = await response.json();
+                const apodData = await response.json();
 
-                const card = document.createElement('div');
-                card.className = 'bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow';
-                card.innerHTML = `
-                    <img src="${apod.url}" alt="${apod.title}" class="w-full h-48 object-cover mb-4 rounded">
-                    <h2 class="text-xl font-bold mb-2 text-gray-800">${apod.title}</h2>
-                    <p class="text-sm text-gray-600 mb-4">${apod.date}</p>
-                    <p class="text-gray-600">${apod.explanation.substring(0, 150)}...</p>
-                    <div class="mt-4">
-                        <a href="${apod.hdurl}" target="_blank" class="text-blue-600 hover:text-blue-800">HD-Bild ansehen →</a>
-                    </div>
-                `;
-                resultsDiv.appendChild(card);
+                apodData.forEach(apod => {
+                    const card = document.createElement('div');
+                    card.className =
+                        'flex flex-col items-center bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow p-6 cursor-pointer';
+                    card.innerHTML = `
+                        <img src="${apod.url}" alt="${apod.title}" class="w-full h-64 object-cover rounded-xl mb-4">
+                        <h2 class="text-2xl font-bold mb-2">${apod.title}</h2>
+                        <p class="text-gray-600 text-sm mb-4">${apod.date}</p>
+                        <p class="line-clamp-3">${apod.explanation}</p>
+                        <button class="mehr-lesen mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Mehr lesen</button>
+                    `;
+                    resultsDiv.appendChild(card);
+
+                    card.querySelector('.mehr-lesen').addEventListener('click', () => {
+                        openModal(apod.title, apod.explanation, apod.hdurl);
+                    });
+                });
             } catch (error) {
                 resultsDiv.innerHTML = `
                     <div class="col-span-full text-center text-red-600">
@@ -993,6 +1049,17 @@
             }
 
             loadingDiv.classList.add('hidden');
+        }
+
+        function openModal(title, description, hdurl) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-description').innerText = description;
+            document.getElementById('modal-hdurl').href = hdurl;
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
         }
     </script>
 </body>
